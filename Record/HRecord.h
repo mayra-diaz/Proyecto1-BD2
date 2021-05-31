@@ -4,9 +4,13 @@
 #include "BaseRecord.h"
 
 template <typename keyType>
-struct HRecord: public BaseRecord {
+struct HTeam: public Team {
     long prevDeleted=-2;
-    HRecord(keyType key) : BaseRecord(key) {}
+    HRecord()=default;
+};
+
+struct HTeamIncident: public TeamIncident {
+    long prevDeleted=-2;
     HRecord()=default;
 };
 

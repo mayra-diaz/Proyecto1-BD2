@@ -33,6 +33,7 @@ struct TeamIncident: public Record<keyType> {
     int time;
 };
 
+/*
 with open('Incidents.csv', 'r') as file:
     reader = csv.reader(file, quoting=csv.QUOTE_ALL, skipinitialspace=True)
     f = open('in.csv', "w")
@@ -40,7 +41,7 @@ with open('Incidents.csv', 'r') as file:
         temp = row;
         temp[5] = temp[5][:2]
         f.write(temp[0]+','+temp[1]+','+temp[2]+','+temp[3]+','+temp[4]+','+temp[5]+','+temp[6]+'\n')
-    f.close()
+    f.close()*/
 
 
 #endif //PROYECTO1_BD2_BASERECORD_H
