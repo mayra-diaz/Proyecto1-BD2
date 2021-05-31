@@ -1,15 +1,15 @@
 #ifndef PROYECTO1_BD2_BASERECORD_H
 #define PROYECTO1_BD2_BASERECORD_H
 
-template <typename keyType>
+template <typename RecordType>
 struct BaseRecord {
-    keyType key;
-    BaseRecord(keyType key) : key(key) {}
-    BaseRecord()=default;
+    typedef typename RecordType::KeyType KeyType;
+    RecordType fileRecord;
 };
 
-template <typename keyType>
-struct Team: public Record<keyType> {
+struct Team {
+    typedef KeyType = char[30];
+
     char name[30];
     int overturns,
         leadingToGoalsFor,
@@ -20,10 +20,14 @@ struct Team: public Record<keyType> {
         subjectiveDecisionsAgainst,
         netGoalScore,
         netSubjectiveScore;
+    char[30] getKey() {
+        // TODO: convertir a string
+        return name;
+    }
 };
 
-template <typename keyType>
-struct TeamIncident: public Record<keyType> {
+struct TeamIncident {
+    typedef KeyType = std::string;
     char team[30],
         opponentTeam[30],
         date[8],
@@ -31,16 +35,10 @@ struct TeamIncident: public Record<keyType> {
         incident[80],
         var[8];
     int time;
+    char[30] getKey() {
+        // TODO: convertir a string
+        return team;
+    }
 };
 
-with open('Incidents.csv', 'r') as file:
-    reader = csv.reader(file, quoting=csv.QUOTE_ALL, skipinitialspace=True)
-    f = open('in.csv', "w")
-    for row in reader:
-        temp = row;
-        temp[5] = temp[5][:2]
-        f.write(temp[0]+','+temp[1]+','+temp[2]+','+temp[3]+','+temp[4]+','+temp[5]+','+temp[6]+'\n')
-    f.close()
-
-
-#endif //PROYECTO1_BD2_BASERECORD_H
+#endif  //PROYECTO1_BD2_BASERECORD_H

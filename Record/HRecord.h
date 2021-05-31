@@ -3,11 +3,9 @@
 
 #include "BaseRecord.h"
 
-template <typename keyType>
-struct HRecord: public BaseRecord {
-    long prevDeleted=-2;
-    HRecord(keyType key) : BaseRecord(key) {}
-    HRecord()=default;
+template <typename RecordType>
+struct EHRecord : public BaseRecord {
+    // TODO: Paolo SABE
 };
 
-#endif //PROYECTO1_BD2_HRECORD_H
+#endif  //PROYECTO1_BD2_HRECORD_H
