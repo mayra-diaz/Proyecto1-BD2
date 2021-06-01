@@ -5,13 +5,14 @@
 
 template<typename RecordType>
 struct BaseRecord {
-    typedef typename RecordType::KeyType KeyType;
     RecordType fileRecord;
-
-    explicit BaseRecord(std::vector<str> &splitLine) : fileRecord(splitLine) {};
+    explicit BaseRecord(std::vector<str> &splitLine) : fileRecord(splitLine) {}
+    BaseRecord() = default;
 };
 
 struct Team {
+    typedef std::string KeyType;
+
     char name[30]{};
     int overturns{},
             leadingToGoalsFor{},
@@ -22,8 +23,6 @@ struct Team {
             subjectiveDecisionsAgainst{},
             netGoalScore{},
             netSubjectiveScore{};
-
-    typedef std::string KeyType;
 
     Team() = default;
 
@@ -54,7 +53,7 @@ struct Team {
         std::cout << "subjectiveDecisionsFor:\t" << subjectiveDecisionsFor << std::endl;
         std::cout << "subjectiveDecisionsAgainst:\t" << subjectiveDecisionsAgainst << std::endl;
         std::cout << "netGoalScore:\t" << netGoalScore << std::endl;
-        std::cout << "netSubjectiveScore:\t" << netSubjectiveScore << std::endl << std::endl;
+        std::cout << "netSubjectiveScore:\t" << netSubjectiveScore << std::endl;
 
     }
 };
@@ -68,8 +67,6 @@ struct TeamIncident {
             incident[200]{},
             var[8]{};
     int time{};
-
-    typedef std::string KeyType;
 
     TeamIncident() = default;
 
@@ -94,7 +91,7 @@ struct TeamIncident {
         std::cout << "site:\t" << site << std::endl;
         std::cout << "incident:\t" << std::string(incident) << std::endl;
         std::cout << "var:\t" << std::string(var) << std::endl;
-        std::cout << "time:\t" << time << std::endl << std::endl;
+        std::cout << "time:\t" << time << std::endl;
 
     }
 };

@@ -50,9 +50,7 @@ private:
             }
             splitLine.push_back(var);
             SFRecord<RecordType> record(splitLine);
-            record.nextDel = -2;
-            record.prevDel = -2;
-            sequentialFile.write((char *) &record, sizeof(RecordType));
+            sequentialFile.write((char *) &record, sizeof(record));
 
             splitLine.clear();
             i = 0;
@@ -381,11 +379,11 @@ public:
 
     SequentialFile() = default;
 
-    std::vector<RecordType> load() {
-        std::vector<RecordType> records;
+    std::vector<SFRecord<RecordType>> load() {
+        std::vector<SFRecord<RecordType>> records;
         std::fstream sequentialFile(this->dataFileName, std::ios::in | std::ios::binary);
-
-        RecordType record;
+        sequentialFile.seekg(0, std::ios::beg);
+        SFRecord<RecordType> record;
         while (sequentialFile.read((char *) &record, sizeof(record))) {
             records.push_back(record);
             //sequentialFile.seekg(0, std::ios::cur);
