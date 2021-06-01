@@ -1,6 +1,7 @@
 #ifndef PROYECTO1_BD2_SEQUENTIALFILE_H
 #define PROYECTO1_BD2_SEQUENTIALFILE_H
 
+#include <sys/stat.h>
 #include "../Record/SFRecord.h"
 
 template<typename RecordType>
@@ -367,8 +368,8 @@ private:
     }
 
 public:
-    explicit SequentialFile(const str &baseFileName) {
-        str name = baseFileName.substr(0, baseFileName.find(".csv"));
+    explicit SequentialFile(const str &baseFileName, const str bname) {
+        str name = "../" + bname;
         this->headerFileName = name + "Header.bin";
         this->dataFileName = name + "Data.bin";
         this->auxFileName = name + "Aux.bin";

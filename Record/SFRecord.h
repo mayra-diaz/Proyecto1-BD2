@@ -1,8 +1,28 @@
 #ifndef PROYECTO1_BD2_SFRECORD_H
 #define PROYECTO1_BD2_SFRECORD_H
 
-#include "BaseRecord.h"
+#include "TeamRecord.h"
 
+//nextDel = {-2:active record, -1:no deleted records, 0+: next deleted record}
+
+template<typename RecordType>
+struct SFRecord {
+    RecordType fileRecord;
+    long nextDel = -2;
+    long prevDel = -2;
+
+    explicit SFRecord(std::vector <str> &splitLine) : fileRecord(splitLine) {};
+
+    SFRecord(): nextDel(-2), prevDel(-2) {};
+
+    void print(){
+        this->fileRecord.print();
+        std::cout << "NextDel: " << nextDel << '\n' << "PrevDel: " << prevDel << "\n\n";
+    }
+};
+
+
+/*
 template<typename  RecordType>
 struct SFRecord {
     char name[30]{};
@@ -51,23 +71,6 @@ struct SFRecord {
         std::cout << "NextDel: " << nextDel << '\n' << "PrevDel: " << prevDel << "\n\n";
     }
 };
-
-//nextDel = {-2:active record, -1:no deleted records, 0+: next deleted record}
-/*
-template<typename RecordType>
-struct SFRecord {
-    RecordType fileRecord;
-    long nextDel = -2;
-    long prevDel = -2;
-
-    explicit SFRecord(std::vector <str> &splitLine) : fileRecord(splitLine) {};
-
-    SFRecord(): nextDel(-2), prevDel(-2) {};
-
-    void print(){
-        this->fileRecord.print();
-        std::cout << "NextDel: " << nextDel << '\n' << "PrevDel: " << prevDel << "\n\n";
-    }
-};*/
+*/
 
 #endif  //PROYECTO1_BD2_SFRECORD_H
