@@ -56,6 +56,7 @@ private:
 
             splitLine.clear();
             i = 0;
+            var = "";
         }
 
         inputFile.close();
@@ -382,11 +383,12 @@ public:
 
     std::vector<RecordType> load() {
         std::vector<RecordType> records;
-        std::fstream sequentialFile(this->dataFileName, std::ios::in);
+        std::fstream sequentialFile(this->dataFileName, std::ios::in | std::ios::binary);
 
-        RecordType record = RecordType();
+        RecordType record;
         while (sequentialFile.read((char *) &record, sizeof(record))) {
             records.push_back(record);
+            //sequentialFile.seekg(0, std::ios::cur);
         }
 
         return records;
