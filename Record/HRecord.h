@@ -3,8 +3,8 @@
 
 #include "BaseRecord.h"
 
-template <typename RecordType>
-struct EHRecord : public BaseRecord {
+template<typename RecordType>
+struct EHRecord : public BaseRecord<RecordType> {
     // TODO: Paolo SABE
 };
 

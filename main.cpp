@@ -1,6 +1,9 @@
-#include <iostream>
+#include "Record/BaseRecord.h"
+#include "Record/SFRecord.h"
+#include "Record/HRecord.h"
+#include "SequentialFile/SequentialFile.h"
 
 int main() {
-    std::cout << "Hello, World!" << std::endl;
+    SequentialFile<Team> sq("../data/Teams.csv");
     return 0;
 }

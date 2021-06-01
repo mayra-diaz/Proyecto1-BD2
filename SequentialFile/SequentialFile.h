@@ -1,23 +1,17 @@
 #ifndef PROYECTO1_BD2_SEQUENTIALFILE_H
 #define PROYECTO1_BD2_SEQUENTIALFILE_H
 
-#include <fstream>
-#include <string>
-#include <vector>
+#include "../Record/SFRecord.h"
 
-#include "Record/SFRecord.h"
-
-typedef str str;
-
-template <typename RecordType>
+template<typename RecordType>
 class SequentialFile {
-   public:
+public:
     typedef typename RecordType::KeyType KeyType;
 
-   private:
-    str indexFileName;  // index.bin
-    str dataFileName;   // data.bin
-    str auxFileName;    // aux.bin
+private:
+    str headerFileName;  // index.bin
+    str dataFileName;    // data.bin
+    str auxFileName;     // aux.bin
 
     unsigned long totalOrderedRecords{};
     unsigned long totalUnorderedRecords{};
@@ -29,70 +23,79 @@ class SequentialFile {
         return size;
     }
 
-    void initializeSequentialFile(str baseFileName) {
+    void initializeSequentialFile(const str &baseFileName) {
         std::ifstream inputFile(baseFileName, std::ios::in);
         std::ofstream sequentialFile(this->dataFileName, std::ios::out | std::ios::binary);
+        sequentialFile.seekp(0, std::ios::beg);
 
-        SFRecord record;
-        long currentNext = 1;
-        long currentPrev = -1;
+        if (!inputFile.is_open())
+            throw std::runtime_error("Could not open " + baseFileName);
 
-        unsigned long totalLines = getFileSize(baseFileName) / (sizeof(RecordType) - 2 * sizeof(long));
-        while (inputFile.read((char *)&record, sizeof(RecordType) - 2 * sizeof(long))) {
-            record.next = totalLines == currentNext ? -2 : currentNext++;
-            record.prev = currentPrev++;
-            sequentialFile.write((char *)&record, sizeof(RecordType));
+        str line, var;
+        std::vector<str> splitLine;
+        char c;
+        int i = 0;
+        // Read data, line by line
+        std::getline(inputFile, line);
+        while (std::getline(inputFile, line)) {
+            while (i < line.size()) {
+                if (line[i] == ',') {
+                    splitLine.push_back(var);
+                    i++;
+                    var.clear();
+                    continue;
+                }
+                var += line[i];
+                i++;
+            }
+            splitLine.push_back(var);
+            SFRecord<RecordType> record(splitLine);
+            record.nextDel = -2;
+            record.prevDel = -2;
+            sequentialFile.write((char *) &record, sizeof(RecordType));
+
+            splitLine.clear();
+            i = 0;
         }
 
-        totalOrderedRecords = totalLines;
-        totalUnorderedRecords = 0;
-        //...abajo de esto corre?
-        /*std::vector<std::string> result;
-        std::string line;
-        std::getline(str, line);
+        inputFile.close();
 
-        std::stringstream lineStream(line);
-        std::string cell;
-
-        while (std::getline(lineStream, cell, ',')) {
-            result.push_back(cell);
-        }
-        // This checks for a trailing comma with no data after it.
-        if (!lineStream && cell.empty()) {
-            // If there was a trailing comma then add an empty element.
-            result.push_back("");
-        }*/
+        //totalOrderedRecords = totalLines;
+        //totalUnorderedRecords = 0;
     }
 
     void initializeFreeList() {
-        std::fstream header(this->indexFileName, std::ios::out);
+        std::fstream header(this->headerFileName, std::ios::out | std::ios::binary);
+        if (!header.is_open())
+            throw std::runtime_error("Could not open " + headerFileName);
+
         long headerPointer = -1;
-        header.seekp(0);
-        header.write((char *)&headerPointer, sizeof(headerPointer));
+        header.seekp(0, std::ios::beg);
+        header.write((char *) &headerPointer, sizeof(headerPointer));
         header.close();
     }
 
     RecordType getPrevRecord(RecordType record) {
-        if (record.next == -2) {
+        if (record.nextDel == -2) {
             record = this->read(this->dataFileName, totalOrderedRecords - 2);
         } else {
-            record = this->read(this->dataFileName, record.next);
-            record = this->read(this->dataFileName, record.prev - 1);
+            record = this->read(this->dataFileName, record.nextDel);
+            record = this->read(this->dataFileName, record.prevDel - 1);
         }
         return record;
     }
 
     void simpleInsert(RecordType baseRecord, RecordType record) {
-        RecordType baseRecordNext = this->read(this->dataFileName, baseRecord.next);
+        RecordType baseRecordNext = this->read(this->dataFileName, baseRecord.nextDel);
 
         long currentRecordLogPos = this->findWhereToInsert();
-        long baseRecordLogPos = baseRecordNext.prev;
-        long baseRecordNextLogPos = baseRecord.next;
+        long baseRecordLogPos = baseRecordNext.prevDel;
+        long baseRecordNextLogPos = baseRecord.nextDel;
 
-        baseRecord.next = currentRecordLogPos;
-        record.prev = baseRecordLogPos;
-        record.next = baseRecordNextLogPos;
-        baseRecordNext.prev = currentRecordLogPos;
+        baseRecord.nextDel = currentRecordLogPos;
+        record.prevDel = baseRecordLogPos;
+        record.nextDel = baseRecordNextLogPos;
+        baseRecordNext.prevDel = currentRecordLogPos;
 
         this->write(baseRecord, this->dataFileName, baseRecordLogPos);
         this->write(record, this->dataFileName, currentRecordLogPos);
@@ -102,70 +105,70 @@ class SequentialFile {
     // insert "toInsert" to the left of "currentRecord"
     void insertUpdatingPointers(RecordType toInsert, RecordType currentRecord) {
         // get previous record
-        long prevRecordLogPos = currentRecord.prev;
+        long prevRecordLogPos = currentRecord.prevDel;
         RecordType prevRecord = this->read(this->dataFileName, prevRecordLogPos);
 
         // get logical position of currentRecord
-        long currentRecLogPos = prevRecord.next;
+        long currentRecLogPos = prevRecord.nextDel;
         // calculate logical position of toInsert
         long toInsertLogPos = this->findWhereToInsert();
 
-        // update prevRecord.next
-        prevRecord.next = toInsertLogPos;
+        // update prevRecord.nextDel
+        prevRecord.nextDel = toInsertLogPos;
         this->write(prevRecord, this->dataFileName, prevRecordLogPos);
 
         // set toInsert pointers
-        toInsert.next = currentRecLogPos;
-        toInsert.prev = prevRecordLogPos;
+        toInsert.nextDel = currentRecLogPos;
+        toInsert.prevDel = prevRecordLogPos;
         this->write(toInsert, this->dataFileName, toInsertLogPos);
 
-        // update currentRecord.prev
-        currentRecord.prev = toInsertLogPos;
+        // update currentRecord.prevDel
+        currentRecord.prevDel = toInsertLogPos;
         this->write(currentRecord, this->dataFileName, currentRecLogPos);
     }
 
     void insertAtFirstPosition(RecordType record) {
         RecordType firstRecord = this->read(this->dataFileName, this->getFirstRecordLogPos());
-        RecordType firstRecordNext = this->read(this->dataFileName, firstRecord.next);
+        RecordType firstRecordNext = this->read(this->dataFileName, firstRecord.nextDel);
 
         long toInsertLogPos = this->findWhereToInsert();
 
-        record.next = toInsertLogPos;
-        firstRecordNext.prev = toInsertLogPos;
-        record.prev = -1;
+        record.nextDel = toInsertLogPos;
+        firstRecordNext.prevDel = toInsertLogPos;
+        record.prevDel = -1;
 
-        firstRecord.prev = 0;
+        firstRecord.prevDel = 0;
 
         this->write(record, this->dataFileName, this->getFirstRecordLogPos());
         this->write(firstRecord, this->dataFileName, toInsertLogPos);
-        this->write(firstRecordNext, this->dataFileName, firstRecord.next);
+        this->write(firstRecordNext, this->dataFileName, firstRecord.nextDel);
     }
 
     void insertAtLastPosition(RecordType record) {
         RecordType lastRecord = this->read(this->dataFileName, totalOrderedRecords - 1);
 
-        record.next = -2;
-        record.prev = totalOrderedRecords - 1;
+        record.nextDel = -2;
+        record.prevDel = totalOrderedRecords - 1;
 
         long toInsertLogPos = this->findWhereToInsert();
 
-        lastRecord.next = toInsertLogPos;
+        lastRecord.nextDel = toInsertLogPos;
 
         this->write(lastRecord, this->dataFileName, totalOrderedRecords - 1);
         this->write(record, this->dataFileName, toInsertLogPos);
     }
 
     void insertAfterNull(RecordType current, RecordType record) {
-        RecordType currentRecordPrev = this->read(this->dataFileName, current.prev);
+        RecordType currentRecordPrev = this->read(this->dataFileName, current.prevDel);
 
-        record.next = -2;
-        record.prev = currentRecordPrev.next;
+        record.nextDel = -2;
+        record.prevDel = currentRecordPrev.nextDel;
 
         long toInsertLogPos = this->findWhereToInsert();
 
-        current.next = toInsertLogPos;
+        current.nextDel = toInsertLogPos;
 
-        this->write(current, this->dataFileName, currentRecordPrev.next);
+        this->write(current, this->dataFileName, currentRecordPrev.nextDel);
         this->write(record, this->dataFileName, toInsertLogPos);
     }
 
@@ -201,23 +204,23 @@ class SequentialFile {
     }
 
     void updatePointersDelete(RecordType toDelete, long toDeleteLogPos) {
-        if (toDelete.prev == -1) {  // first register
-            RecordType toDeleteNext = this->read(this->dataFileName, toDelete.next);
-            toDeleteNext.prev = -1;
-            this->write(toDeleteNext, this->dataFileName, toDelete.next);
-        } else if (toDelete.next == -2) {  // register whose next is null
+        if (toDelete.prevDel == -1) {  // first register
+            RecordType toDeleteNext = this->read(this->dataFileName, toDelete.nextDel);
+            toDeleteNext.prevDel = -1;
+            this->write(toDeleteNext, this->dataFileName, toDelete.nextDel);
+        } else if (toDelete.nextDel == -2) {  // register whose nextDel is null
             RecordType toDeletePrev;
-            toDeletePrev = this->read(this->dataFileName, toDelete.prev);
-            toDeletePrev.next = -2;
-            this->write(toDeletePrev, this->dataFileName, toDelete.prev);
+            toDeletePrev = this->read(this->dataFileName, toDelete.prevDel);
+            toDeletePrev.nextDel = -2;
+            this->write(toDeletePrev, this->dataFileName, toDelete.prevDel);
         } else {  // normal case
             RecordType toDeletePrev, toDeleteNext;
-            toDeletePrev = this->read(this->dataFileName, toDelete.prev);
-            toDeleteNext = this->read(this->dataFileName, toDelete.next);
-            toDeletePrev.next = toDelete.next;
-            toDeleteNext.prev = toDelete.prev;
-            this->write(toDeletePrev, this->dataFileName, toDelete.prev);
-            this->write(toDeleteNext, this->dataFileName, toDelete.next);
+            toDeletePrev = this->read(this->dataFileName, toDelete.prevDel);
+            toDeleteNext = this->read(this->dataFileName, toDelete.nextDel);
+            toDeletePrev.nextDel = toDelete.nextDel;
+            toDeleteNext.prevDel = toDelete.prevDel;
+            this->write(toDeletePrev, this->dataFileName, toDelete.prevDel);
+            this->write(toDeleteNext, this->dataFileName, toDelete.nextDel);
         }
     }
 
@@ -231,18 +234,18 @@ class SequentialFile {
     }
 
     long readHeader() {
-        std::fstream header(this->indexFileName);
+        std::fstream header(this->headerFileName);
         long headerValue;
         header.seekg(0);
-        header.read((char *)&headerValue, sizeof(headerValue));
+        header.read((char *) &headerValue, sizeof(headerValue));
         header.close();
         return headerValue;
     }
 
     void writeHeader(long toDeleteLogPos) {
-        std::fstream header(this->indexFileName);
+        std::fstream header(this->headerFileName);
         header.seekp(0);
-        header.write((char *)&toDeleteLogPos, sizeof(toDeleteLogPos));
+        header.write((char *) &toDeleteLogPos, sizeof(toDeleteLogPos));
         header.close();
     }
 
@@ -256,7 +259,7 @@ class SequentialFile {
     long getFirstRecordLogPos() {
         long currentRecordLogPos = 0;
         RecordType currentRecord = this->read(this->dataFileName, currentRecordLogPos);
-        while (currentRecord.prev == -1) {
+        while (currentRecord.prevDel == -1) {
             currentRecord = this->read(this->dataFileName, ++currentRecordLogPos);
         }
         return currentRecordLogPos - 1;
@@ -267,11 +270,11 @@ class SequentialFile {
         std::fstream auxFile(this->auxFileName, std::ios::out);
 
         RecordType record = this->read(this->dataFileName, this->getFirstRecordLogPos());
-        while (record.next != -2) {
-            auxFile.write((char *)&record, sizeof(RecordType));
-            record = this->read(this->dataFileName, record.next);
+        while (record.nextDel != -2) {
+            auxFile.write((char *) &record, sizeof(RecordType));
+            record = this->read(this->dataFileName, record.nextDel);
         }
-        auxFile.write((char *)&record, sizeof(RecordType));
+        auxFile.write((char *) &record, sizeof(RecordType));
 
         sequentialFile.close();
         auxFile.close();
@@ -282,10 +285,10 @@ class SequentialFile {
         long currentNext = 1;
         long currentPrev = -1;
 
-        while (auxFile.read((char *)&record, sizeof(RecordType))) {
-            record.next = totalLines == currentNext ? -2 : currentNext++;
-            record.prev = currentPrev++;
-            sequentialFile.write((char *)&record, sizeof(RecordType));
+        while (auxFile.read((char *) &record, sizeof(RecordType))) {
+            record.nextDel = totalLines == currentNext ? -2 : currentNext++;
+            record.prevDel = currentPrev++;
+            sequentialFile.write((char *) &record, sizeof(RecordType));
         }
 
         sequentialFile.close();
@@ -293,11 +296,11 @@ class SequentialFile {
     }
 
     long getLogicalPosition(RecordType record) {
-        if (record.prev == -1) {
+        if (record.prevDel == -1) {
             return 0;
         } else {
-            RecordType prevRecord = this->read(this->dataFileName, record.prev);
-            return prevRecord.next;
+            RecordType prevRecord = this->read(this->dataFileName, record.prevDel);
+            return prevRecord.nextDel;
         }
     }
 
@@ -308,7 +311,7 @@ class SequentialFile {
             return totalOrderedRecords + totalUnorderedRecords;
         } else {
             RecordType deleted = read(this->dataFileName, currentHeader);
-            writeHeader(deleted.next);
+            writeHeader(deleted.nextDel);
             return currentHeader;
         }
     }
@@ -317,7 +320,7 @@ class SequentialFile {
         std::fstream file(fileName);
         RecordType record;
         file.seekg(position * sizeof(RecordType));
-        file.read((char *)&record, sizeof(RecordType));
+        file.read((char *) &record, sizeof(RecordType));
         file.close();
         return record;
     }
@@ -325,7 +328,7 @@ class SequentialFile {
     void write(RecordType record, const str &fileName, long position) {
         std::fstream file(fileName);
         file.seekp(position * sizeof(RecordType));
-        file.write((char *)&record, sizeof(RecordType));
+        file.write((char *) &record, sizeof(RecordType));
         file.close();
     }
 
@@ -333,28 +336,28 @@ class SequentialFile {
         RecordType current;
 
         long baseRecordLogPos;
-        RecordType baseRecordNext = this->read(this->dataFileName, baseRecord.next);
-        baseRecordLogPos = baseRecordNext.prev;
+        RecordType baseRecordNext = this->read(this->dataFileName, baseRecord.nextDel);
+        baseRecordLogPos = baseRecordNext.prevDel;
 
         current = this->read(this->dataFileName, baseRecordLogPos);
-        while (current.next > totalOrderedRecords - 1 && current.next != -2 &&
+        while (current.nextDel > totalOrderedRecords - 1 && current.nextDel != -2 &&
                current.ID < toInsert.ID) {  // find where to insert
             if (current.ID == toInsert.ID) {
                 throw std::out_of_range("User attempted to insert an already existing ID");
             }
-            current = this->read(this->dataFileName, current.next);
+            current = this->read(this->dataFileName, current.nextDel);
         }
         if (current.ID == toInsert.ID) {  // check last register ID
             throw std::out_of_range("User attempted to insert an already existing ID");
         }
-        if (current.next < totalOrderedRecords) {  // if current points to ordered records
+        if (current.nextDel < totalOrderedRecords) {  // if current points to ordered records
             if (current.ID > toInsert.ID) {
                 this->insertUpdatingPointers(toInsert, current);
             } else {
-                if (current.next == -2) {
+                if (current.nextDel == -2) {
                     this->insertAfterNull(current, toInsert);  // special case
                 } else {
-                    long currentNextLogPos = current.next;
+                    long currentNextLogPos = current.nextDel;
                     RecordType currentNext = this->read(this->dataFileName, currentNextLogPos);
                     this->insertUpdatingPointers(toInsert, currentNext);  // insert record to the left of currentNext
                 }
@@ -364,14 +367,14 @@ class SequentialFile {
         }
     }
 
-   public:
-    SequentialFile(const str &baseFileName) {
-        str name = baseFileName.substr(0, baseFileName.find("."));
-        this->indexFileName = name + "Index.bin";
+public:
+    explicit SequentialFile(const str &baseFileName) {
+        str name = baseFileName.substr(0, baseFileName.find(".csv"));
+        this->headerFileName = name + "Header.bin";
         this->dataFileName = name + "Data.bin";
         this->auxFileName = name + "Aux.bin";
 
-        this->initializeSequentialFile();
+        this->initializeSequentialFile(baseFileName);
         this->initializeFreeList();
     }
 
@@ -382,7 +385,7 @@ class SequentialFile {
         std::fstream sequentialFile(this->dataFileName, std::ios::in);
 
         RecordType record = RecordType();
-        while (sequentialFile.read((char *)&record, sizeof(record))) {
+        while (sequentialFile.read((char *) &record, sizeof(record))) {
             records.push_back(record);
         }
 
@@ -396,7 +399,7 @@ class SequentialFile {
             return baseRecord;
         }
 
-        if ((baseRecord.prev == -1 && ID < baseRecord.ID) || (baseRecord.next == -2 && ID > baseRecord.ID)) {
+        if ((baseRecord.prevDel == -1 && ID < baseRecord.ID) || (baseRecord.nextDel == -2 && ID > baseRecord.ID)) {
             throw std::out_of_range("Search out of range. ID: " + std::to_string(ID));
         }
 
@@ -406,12 +409,12 @@ class SequentialFile {
 
         RecordType current = baseRecord;
 
-        current = this->read(this->dataFileName, current.next);
+        current = this->read(this->dataFileName, current.nextDel);
         while (current.ID <= ID) {
             if (current.ID == ID) {
                 return current;
             } else {
-                current = this->read(this->dataFileName, current.next);
+                current = this->read(this->dataFileName, current.nextDel);
             }
         }
 
@@ -425,7 +428,7 @@ class SequentialFile {
 
         RecordType current = this->searchInOrderedRecords(begin);
 
-        if (current.prev != -1) {
+        if (current.prevDel != -1) {
             if (current.ID > begin) {
                 current = this->getPrevRecord(current);
             }
@@ -437,10 +440,10 @@ class SequentialFile {
             if (current.ID >= begin && current.ID <= end) {
                 searchResult.push_back(current);
             }
-            if (current.ID > end || current.next == -2) {
+            if (current.ID > end || current.nextDel == -2) {
                 return searchResult;
             }
-            current = this->read(this->dataFileName, current.next);
+            current = this->read(this->dataFileName, current.nextDel);
         }
     }
 
@@ -471,15 +474,15 @@ class SequentialFile {
             throw std::out_of_range("User attempted to insert an already existing ID");
         }
 
-        if (baseRecord.prev == -1 && toInsert.ID < baseRecord.ID) {  // insert at the beginning
+        if (baseRecord.prevDel == -1 && toInsert.ID < baseRecord.ID) {  // insert at the beginning
             this->insertAtFirstPosition(toInsert);
-        } else if (baseRecord.next == -2) {  // insert at last position
+        } else if (baseRecord.nextDel == -2) {  // insert at last position
             this->insertAtLastPosition(toInsert);
         } else {
             if (baseRecord.ID > toInsert.ID) {
                 baseRecord = this->getPrevRecord(baseRecord);
             }
-            if (baseRecord.next < totalOrderedRecords) {
+            if (baseRecord.nextDel < totalOrderedRecords) {
                 this->simpleInsert(baseRecord,
                                    toInsert);  // when it's not necessary to insert "between" unordered registers
             } else {                           // when baseRecord points to unordered records
