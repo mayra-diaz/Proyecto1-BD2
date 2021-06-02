@@ -32,7 +32,20 @@ struct Team {
         netSubjectiveScore = std::stoi(splitLine[9]);
     }
 
-    str getKey() {
+    Team(const KeyType &key, long next) {
+        strcpy(this->name, key.c_str());
+        overturns =
+        leadingToGoalsFor =
+        leadingToGoalsAgainst =
+        disallowedGoalsFor =
+        disallowedGoalsAgainst =
+        subjectiveDecisionsFor =
+        subjectiveDecisionsAgainst =
+        netGoalScore =
+        netSubjectiveScore = 0;
+    }
+
+    KeyType getKey() {
         return std::string(name);
     }
 
