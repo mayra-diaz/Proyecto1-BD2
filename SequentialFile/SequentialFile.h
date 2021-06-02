@@ -26,6 +26,22 @@ private:
         return (strcmp(a.getKey().c_str(), b.getKey().c_str()) <= 0);
     }
 
+    long readHeader() {
+        std::fstream header(this->headerFileName);
+        long headerValue;
+        header.seekg(0);
+        header.read((char *) &headerValue, sizeof(headerValue));
+        header.close();
+        return headerValue;
+    }
+
+    void writeHeader(long toDeleteLogPos) {
+        std::fstream header(this->headerFileName);
+        header.seekp(0);
+        header.write((char *) &toDeleteLogPos, sizeof(toDeleteLogPos));
+        header.close();
+    }
+
     void createBinFromCSV(const str &baseFileName) {
         std::ifstream inputFile(baseFileName, std::ios::in);
         std::vector<SFRecord<RecordType>> recordsVector;
@@ -104,24 +120,6 @@ private:
         return record;
     }
 
-    void basicInsert(SFRecord<RecordType> base, SFRecord<RecordType> record) {
-        SFRecord<RecordType> baseNext = this->readFile(this->dataFileName, base.nextReg);
-
-        long currentPos = this->insertHere();
-        long basePos = baseNext.prevReg;
-        long baseNextPos = base.nextReg;
-
-        base.nextReg = currentPos;
-        record.prevReg = basePos;
-        record.nextReg = baseNextPos;
-        baseNext.prevReg = currentPos;
-
-        this->writeFile(base, this->dataFileName, basePos);
-        this->writeFile(record, this->dataFileName, currentPos);
-        this->writeFile(baseNext, this->dataFileName, baseNextPos);
-    }
-
-    
     void pointersUpdate(SFRecord<RecordType> newRecord, SFRecord<RecordType> currentRecord) {
         long prevRecordPos = currentRecord.prevReg;
         SFRecord<RecordType> prevRecord = this->readFile(this->dataFileName, prevRecordPos);
@@ -138,73 +136,6 @@ private:
 
         currentRecord.prevReg = newRecordPos;
         this->writeFile(currentRecord, this->dataFileName, currentPos);
-    }
-
-    void insertAtTheBeginning(SFRecord<RecordType> newRecord) {
-        SFRecord<RecordType> firstRecord = this->readFile(this->dataFileName, this->getFirstRecordPos());
-        SFRecord<RecordType> secondRecord = this->readFile(this->dataFileName, firstRecord.nextReg);
-
-        long newRecordPos = this->insertHere();
-
-        newRecord.nextReg = newRecordPos;
-        secondRecord.prevReg = newRecordPos;
-        newRecord.prevReg = -1;
-        firstRecord.prevReg = 0;
-
-        this->writeFile(newRecord, this->dataFileName, this->getFirstRecordPos());
-        this->writeFile(firstRecord, this->dataFileName, newRecordPos);
-        this->writeFile(secondRecord, this->dataFileName, firstRecord.nextReg);
-    }
-
-    void insertAtTheEnd(SFRecord<RecordType> newRecord) {
-        SFRecord<RecordType> lastRecord = this->readFile(this->dataFileName, mainFileRecords - 1);
-
-        newRecord.nextReg = -2;
-        newRecord.prevReg = mainFileRecords - 1;
-        long newPos = this->insertHere();
-        lastRecord.nextReg = newPos;
-
-        this->writeFile(lastRecord, this->dataFileName, mainFileRecords - 1);
-        this->writeFile(newRecord, this->dataFileName, newPos);
-    }
-
-    void nullBeginningInsertion(SFRecord<RecordType> current, SFRecord<RecordType> record) {
-        SFRecord<RecordType> prev = this->readFile(this->dataFileName, current.prevReg);
-
-        record.nextReg = -2;
-        record.prevReg = prev.nextReg;
-
-        long newPos = this->insertHere();
-        current.nextReg = newPos;
-
-        this->writeFile(current, this->dataFileName, prev.nextReg);
-        this->writeFile(record, this->dataFileName, newPos);
-    }
-
-    void rebuildCall() {
-        this->rebuild();
-        mainFileRecords += AUX_FACTOR;
-        auxFileRecords = 0;
-    }
-
-    SFRecord<RecordType> searchInOrderedRecords(KeyType key) {
-        long low = 0, high = mainFileRecords - 1, mid;
-
-        SFRecord<RecordType> current;
-        while (low <= high) {
-            mid = (low + high) / 2;
-            current = this->readFile(this->dataFileName, mid);
-            KeyType currentID = current.getKey();
-
-            if (currentID < key) {
-                low = mid + 1;
-            } else if (currentID > key) {
-                high = mid - 1;
-            } else {
-                return current;
-            }
-        }
-        return current;
     }
 
     void pointerUpdateDeletition(SFRecord<RecordType> badRecord, long toDeleteLogPos) {
@@ -235,35 +166,6 @@ private:
         }
     }
 
-    void deleteInMainFile(long toDeleteLogPos) {
-        this->rebuild();
-        mainFileRecords = mainFileRecords + auxFileRecords;
-        auxFileRecords = 0;
-    }
-
-    long readHeader() {
-        std::fstream header(this->headerFileName);
-        long headerValue;
-        header.seekg(0);
-        header.read((char *) &headerValue, sizeof(headerValue));
-        header.close();
-        return headerValue;
-    }
-
-    void writeHeader(long toDeleteLogPos) {
-        std::fstream header(this->headerFileName);
-        header.seekp(0);
-        header.write((char *) &toDeleteLogPos, sizeof(toDeleteLogPos));
-        header.close();
-    }
-
-    void deleteInAuxFile(long toDeleteLogPos) {
-        long headerTemp = readHeader();
-        writeHeader(toDeleteLogPos);
-        SFRecord<RecordType> toDelete("-1", headerTemp);
-        this->writeFile(toDelete, this->dataFileName, toDeleteLogPos);
-    }
-
     long getFirstRecordPos() {
         long currentRecordLogPos = 0;
         SFRecord<RecordType> currentRecord = this->readFile(this->dataFileName, currentRecordLogPos);
@@ -271,6 +173,70 @@ private:
             currentRecord = this->readFile(this->dataFileName, ++currentRecordLogPos);
         }
         return currentRecordLogPos - 1;
+    }
+
+    void insertAtTheBeginning(SFRecord<RecordType> newRecord) {
+        SFRecord<RecordType> firstRecord = this->readFile(this->dataFileName, this->getFirstRecordPos());
+        SFRecord<RecordType> secondRecord = this->readFile(this->dataFileName, firstRecord.nextReg);
+
+        long newRecordPos = this->insertHere();
+
+        newRecord.nextReg = newRecordPos;
+        secondRecord.prevReg = newRecordPos;
+        newRecord.prevReg = -1;
+        firstRecord.prevReg = 0;
+
+        this->writeFile(newRecord, this->dataFileName, this->getFirstRecordPos());
+        this->writeFile(firstRecord, this->dataFileName, newRecordPos);
+        this->writeFile(secondRecord, this->dataFileName, firstRecord.nextReg);
+    }
+
+    void nullBeginningInsertion(SFRecord<RecordType> current, SFRecord<RecordType> record) {
+        SFRecord<RecordType> prev = this->readFile(this->dataFileName, current.prevReg);
+
+        record.nextReg = -2;
+        record.prevReg = prev.nextReg;
+
+        long newPos = this->insertHere();
+        current.nextReg = newPos;
+
+        this->writeFile(current, this->dataFileName, prev.nextReg);
+        this->writeFile(record, this->dataFileName, newPos);
+    }
+
+    void insertAtTheEnd(SFRecord<RecordType> newRecord) {
+        SFRecord<RecordType> lastRecord = this->readFile(this->dataFileName, mainFileRecords - 1);
+
+        newRecord.nextReg = -2;
+        newRecord.prevReg = mainFileRecords - 1;
+        long newPos = this->insertHere();
+        lastRecord.nextReg = newPos;
+
+        this->writeFile(lastRecord, this->dataFileName, mainFileRecords - 1);
+        this->writeFile(newRecord, this->dataFileName, newPos);
+    }
+
+    void basicInsert(SFRecord<RecordType> base, SFRecord<RecordType> record) {
+        SFRecord<RecordType> baseNext = this->readFile(this->dataFileName, base.nextReg);
+
+        long currentPos = this->insertHere();
+        long basePos = baseNext.prevReg;
+        long baseNextPos = base.nextReg;
+
+        base.nextReg = currentPos;
+        record.prevReg = basePos;
+        record.nextReg = baseNextPos;
+        baseNext.prevReg = currentPos;
+
+        this->writeFile(base, this->dataFileName, basePos);
+        this->writeFile(record, this->dataFileName, currentPos);
+        this->writeFile(baseNext, this->dataFileName, baseNextPos);
+    }
+
+    void rebuildCall() {
+        this->rebuild();
+        mainFileRecords += AUX_FACTOR;
+        auxFileRecords = 0;
     }
 
     void rebuild() {
@@ -303,6 +269,39 @@ private:
         sequentialFile.write((char *) &var, sizeof(var));
         sequentialFile.close();
         auxFile.close();
+    }
+
+    SFRecord<RecordType> searchInOrderedRecords(KeyType key) {
+        long low = 0, high = mainFileRecords - 1, mid;
+
+        SFRecord<RecordType> current;
+        while (low <= high) {
+            mid = (low + high) / 2;
+            current = this->readFile(this->dataFileName, mid);
+            KeyType currentID = current.getKey();
+
+            if (currentID < key) {
+                low = mid + 1;
+            } else if (currentID > key) {
+                high = mid - 1;
+            } else {
+                return current;
+            }
+        }
+        return current;
+    }
+
+    void deleteInMainFile(long toDeleteLogPos) {
+        this->rebuild();
+        mainFileRecords = mainFileRecords + auxFileRecords;
+        auxFileRecords = 0;
+    }
+
+    void deleteInAuxFile(long toDeleteLogPos) {
+        long headerTemp = readHeader();
+        writeHeader(toDeleteLogPos);
+        SFRecord<RecordType> toDelete("-1", headerTemp);
+        this->writeFile(toDelete, this->dataFileName, toDeleteLogPos);
     }
 
     long getPos(SFRecord<RecordType> record) {
@@ -485,11 +484,6 @@ public:
         if (++auxFileRecords == AUX_FACTOR)
             this->rebuildCall();
     }
-
-    long getTotalOrderedRecords() {
-        return this->mainFileRecords;
-    }
-
 };
 
 #endif  //PROYECTO1_BD2_SEQUENTIALFILE_H
