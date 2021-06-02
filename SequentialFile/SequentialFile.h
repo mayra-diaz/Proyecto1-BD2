@@ -140,13 +140,13 @@ private:
 
     void pointerUpdateDeletition(SFRecord<RecordType> badRecord, long toDeleteLogPos) {
         switch (badRecord.prevReg) {
-            case -1:{
+            case -1: {
                 SFRecord<RecordType> next = this->readFile(this->dataFileName, badRecord.nextReg);
                 next.prevReg = -1;
                 this->writeFile(next, this->dataFileName, badRecord.nextReg);
                 break;
             }
-            case -2:{
+            case -2: {
                 SFRecord<RecordType> prev;
                 prev = this->readFile(this->dataFileName, badRecord.prevReg);
                 prev.nextReg = -2;
@@ -426,7 +426,6 @@ public:
     std::vector<SFRecord<RecordType>> rangeSearch(KeyType begin, KeyType end) {
         if (begin > end)
             std::swap(begin, end);
-
         SFRecord<RecordType> current = this->searchInOrderedRecords(begin);
         if (current.prevReg != -1) {
             if (current.getKey() > begin)
@@ -440,6 +439,8 @@ public:
                 searchResult.push_back(current);
             if (current.getKey() > end || current.nextReg == -2)
                 return searchResult;
+            if(current.nextReg == -2)
+                break;
             current = this->readFile(this->dataFileName, current.nextReg);
         }
     }
