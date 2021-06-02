@@ -36,7 +36,7 @@ Dado `EH = Extendible Hashing` y `SF = Sequential File` Se espera que:
 #### Header, Data y Aux
 En la implementación optamos por manejar tres archivos. El Header es simplemente un archivo que nos indica la posición del primer archivo eliminado. Si éste es -1, significa que no hay eliminados. Si no lo es, el proceso de lógica sigue el de Free List LIFO. El archivo Data es el que contiene los registros ordenados físicamente. El Aux es un archivo temporal que se utiliza como apoyo a la hora de hacer un ordenamiento total de todos los registros (ya que los nuevos registros se almacenan al final de Data).
 
-El constr
+El constructor se encarga de convertir el archivo csv a un archivo bin, agregando el puntero siguiente y previo a cada registro.
 
 #### Inserción
 Ya data.bin está físicamente ordenado bajo un atributo `key`, por lo que las inserciones que se hacen utilizando la búsqueda binaria. Primero que todo, se verifica que la llave primaria aún no exista. Si este es el caso, se hace una búsqueda binaria, la cual se hace con facilidad gracias a los punteros previos y siguientes de cada registro. Una vez encontrada la posición lógica en la que debe ser insertado el nuevo registro, se modifican los punteros de la tupla previa y siguiente, y el nuevo registro se añade al final del archivo. Se actualiza el número de archivos desordenados, y si es que éste alcanzó el `AUX_FACTOR`, entonces hay que hacer un `rebuild` de todo el data.bin, para que esté nuevamente ordenado de manera física. Es así que el costo promedio es `O(lg(n))`, mientras que el peor caso es `O(n)`. 
