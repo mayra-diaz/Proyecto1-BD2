@@ -8,16 +8,24 @@
 template<typename RecordType>
 struct SFRecord {
     RecordType fileRecord;
-    long nextDel = -2;
-    long prevDel = -2;
+    long nextReg;
+    long prevReg;
 
-    explicit SFRecord(std::vector <str> &splitLine) : fileRecord(splitLine) {};
+    typedef typename RecordType::KeyType KeyType;
 
-    SFRecord(): nextDel(-2), prevDel(-2) {};
+    explicit SFRecord(std::vector<str> &splitLine) : fileRecord(splitLine), nextReg(0), prevReg(0) {};
 
-    void print(){
+    SFRecord(KeyType key, long next) : nextReg(next), prevReg(0) {};
+
+    SFRecord() : nextReg(0), prevReg(0) {};
+
+    KeyType getKey() {
+        return this->fileRecord.getKey();
+    }
+
+    void print() {
         this->fileRecord.print();
-        std::cout << "NextDel: " << nextDel << '\n' << "PrevDel: " << prevDel << "\n\n";
+        std::cout << "NextReg: " << nextReg << '\n' << "PrevReg: " << prevReg << "\n\n";
     }
 };
 
