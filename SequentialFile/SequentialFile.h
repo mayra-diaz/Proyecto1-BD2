@@ -19,8 +19,8 @@ private:
     str dataFileName;    // data.bin
     str auxFileName;     // aux.bin
 
-    unsigned long totalOrderedRecords{};
-    unsigned long totalUnorderedRecords{};
+    unsigned long mainFileRecords{};
+    unsigned long auxFileRecords{};
 
     bool static compare(SFRecord<RecordType> a, SFRecord<RecordType> b) {
         return (strcmp(a.getKey().c_str(), b.getKey().c_str()) <= 0);
@@ -53,9 +53,9 @@ private:
             }
             splitLine.push_back(var);
             SFRecord<RecordType> record(splitLine);
-            //sequentialFile.write((char *) &record, sizeof(record));
-            totalOrderedRecords++;
-            //this->insert(record);
+            //sequentialFile.writeFile((char *) &record, sizeof(record));
+            mainFileRecords++;
+            //this->insertRecord(record);
             splitLine.clear();
             i = 0;
             var = "";
@@ -76,199 +76,169 @@ private:
         sequentialFile.seekp(-2 * sizeof(long), std::ios::end);
         sequentialFile.write((char *) &nullNext, sizeof(nullNext));
         sequentialFile.close();
-        totalUnorderedRecords = 0;
+        auxFileRecords = 0;
     }
 
-    unsigned long getFileSize(const std::string &newFileName) {
+    unsigned long getLenghtOfFile(const std::string &newFileName) {
         std::ifstream file(newFileName, std::ios::ate | std::ios::binary);
         unsigned long size = file.tellg();
         file.close();
         return size;
     }
 
-    /*void initializeSequentialFile() {
-        std::ifstream inputFile(this->inputFileName, std::ios::in);
-        std::ofstream sequentialFile(this->dataFileName, std::ios::out);
-
-        SFRecord<RecordType> record;
-        long currentNext = 1;
-        long currentPrev = -1;
-
-        unsigned long totalLines = getFileSize(this->inputFileName) / (sizeof(SFRecord<RecordType>) - 2 * sizeof(long));
-        while (inputFile.read((char *) &record, sizeof(SFRecord<RecordType>) - 2 * sizeof(long))) {
-            record.nextReg = totalLines == currentNext ? -2 : currentNext++;
-            record.prevReg = currentPrev++;
-            this->insert(record);
-        }
-
-        totalOrderedRecords = totalLines;
-        totalUnorderedRecords = 0;
-    }*/
-
-    void initializeFreeList() {
-        std::fstream header(this->headerFileName, std::ios::out);
+    void createFreeList() {
+        std::fstream file(this->headerFileName, std::ios::out);
         long headerPointer = -1;
-        header.seekp(0);
-        header.write((char *) &headerPointer, sizeof(headerPointer));
-        header.close();
+        file.seekp(0);
+        file.write((char *) &headerPointer, sizeof(headerPointer));
+        file.close();
     }
 
     SFRecord<RecordType> getPrevRecord(SFRecord<RecordType> record) {
-        if (record.nextReg == -2) {
-            record = this->read(this->dataFileName, totalOrderedRecords - 2);
+        if (record.nextReg != -2) {
+            record = this->readFile(this->dataFileName, record.nextReg);
+            record = this->readFile(this->dataFileName, record.prevReg - 1);
         } else {
-            record = this->read(this->dataFileName, record.nextReg);
-            record = this->read(this->dataFileName, record.prevReg - 1);
+            record = this->readFile(this->dataFileName, mainFileRecords - 2);
         }
         return record;
     }
 
-    void simpleInsert(SFRecord<RecordType> baseRecord, SFRecord<RecordType> record) {
-        SFRecord<RecordType> baseRecordNext = this->read(this->dataFileName, baseRecord.nextReg);
+    void basicInsert(SFRecord<RecordType> base, SFRecord<RecordType> record) {
+        SFRecord<RecordType> baseNext = this->readFile(this->dataFileName, base.nextReg);
 
-        long currentRecordLogPos = this->findWhereToInsert();
-        long baseRecordLogPos = baseRecordNext.prevReg;
-        long baseRecordNextLogPos = baseRecord.nextReg;
+        long currentPos = this->insertHere();
+        long basePos = baseNext.prevReg;
+        long baseNextPos = base.nextReg;
 
-        baseRecord.nextReg = currentRecordLogPos;
-        record.prevReg = baseRecordLogPos;
-        record.nextReg = baseRecordNextLogPos;
-        baseRecordNext.prevReg = currentRecordLogPos;
+        base.nextReg = currentPos;
+        record.prevReg = basePos;
+        record.nextReg = baseNextPos;
+        baseNext.prevReg = currentPos;
 
-        this->write(baseRecord, this->dataFileName, baseRecordLogPos);
-        this->write(record, this->dataFileName, currentRecordLogPos);
-        this->write(baseRecordNext, this->dataFileName, baseRecordNextLogPos);
+        this->writeFile(base, this->dataFileName, basePos);
+        this->writeFile(record, this->dataFileName, currentPos);
+        this->writeFile(baseNext, this->dataFileName, baseNextPos);
     }
 
-    // insert "toInsert" to the left of "currentRecord"
-    void insertUpdatingPointers(SFRecord<RecordType> toInsert, SFRecord<RecordType> currentRecord) {
-        // get previous record
-        long prevRecordLogPos = currentRecord.prevReg;
-        SFRecord<RecordType> prevRecord = this->read(this->dataFileName, prevRecordLogPos);
+    
+    void pointersUpdate(SFRecord<RecordType> newRecord, SFRecord<RecordType> currentRecord) {
+        long prevRecordPos = currentRecord.prevReg;
+        SFRecord<RecordType> prevRecord = this->readFile(this->dataFileName, prevRecordPos);
 
-        // get logical position of currentRecord
-        long currentRecLogPos = prevRecord.nextReg;
-        // calculate logical position of toInsert
-        long toInsertLogPos = this->findWhereToInsert();
+        long currentPos = prevRecord.nextReg;
+        long newRecordPos = this->insertHere();
 
-        // update prevRecord.nextReg
-        prevRecord.nextReg = toInsertLogPos;
-        this->write(prevRecord, this->dataFileName, prevRecordLogPos);
+        prevRecord.nextReg = newRecordPos;
+        this->writeFile(prevRecord, this->dataFileName, prevRecordPos);
 
-        // set toInsert pointers
-        toInsert.nextReg = currentRecLogPos;
-        toInsert.prevReg = prevRecordLogPos;
-        this->write(toInsert, this->dataFileName, toInsertLogPos);
+        newRecord.nextReg = currentPos;
+        newRecord.prevReg = prevRecordPos;
+        this->writeFile(newRecord, this->dataFileName, newRecordPos);
 
-        // update currentRecord.prevReg
-        currentRecord.prevReg = toInsertLogPos;
-        this->write(currentRecord, this->dataFileName, currentRecLogPos);
+        currentRecord.prevReg = newRecordPos;
+        this->writeFile(currentRecord, this->dataFileName, currentPos);
     }
 
-    void insertAtFirstPosition(SFRecord<RecordType> record) {
-        SFRecord<RecordType> firstRecord = this->read(this->dataFileName, this->getFirstRecordLogPos());
-        SFRecord<RecordType> firstRecordNext = this->read(this->dataFileName, firstRecord.nextReg);
+    void insertAtTheBeginning(SFRecord<RecordType> newRecord) {
+        SFRecord<RecordType> firstRecord = this->readFile(this->dataFileName, this->getFirstRecordPos());
+        SFRecord<RecordType> secondRecord = this->readFile(this->dataFileName, firstRecord.nextReg);
 
-        long toInsertLogPos = this->findWhereToInsert();
+        long newRecordPos = this->insertHere();
 
-        record.nextReg = toInsertLogPos;
-        firstRecordNext.prevReg = toInsertLogPos;
-        record.prevReg = -1;
-
+        newRecord.nextReg = newRecordPos;
+        secondRecord.prevReg = newRecordPos;
+        newRecord.prevReg = -1;
         firstRecord.prevReg = 0;
 
-        this->write(record, this->dataFileName, this->getFirstRecordLogPos());
-        this->write(firstRecord, this->dataFileName, toInsertLogPos);
-        this->write(firstRecordNext, this->dataFileName, firstRecord.nextReg);
+        this->writeFile(newRecord, this->dataFileName, this->getFirstRecordPos());
+        this->writeFile(firstRecord, this->dataFileName, newRecordPos);
+        this->writeFile(secondRecord, this->dataFileName, firstRecord.nextReg);
     }
 
-    void insertAtLastPosition(SFRecord<RecordType> record) {
-        SFRecord<RecordType> lastRecord = this->read(this->dataFileName, totalOrderedRecords - 1);
+    void insertAtTheEnd(SFRecord<RecordType> newRecord) {
+        SFRecord<RecordType> lastRecord = this->readFile(this->dataFileName, mainFileRecords - 1);
+
+        newRecord.nextReg = -2;
+        newRecord.prevReg = mainFileRecords - 1;
+        long newPos = this->insertHere();
+        lastRecord.nextReg = newPos;
+
+        this->writeFile(lastRecord, this->dataFileName, mainFileRecords - 1);
+        this->writeFile(newRecord, this->dataFileName, newPos);
+    }
+
+    void nullBeginningInsertion(SFRecord<RecordType> current, SFRecord<RecordType> record) {
+        SFRecord<RecordType> prev = this->readFile(this->dataFileName, current.prevReg);
 
         record.nextReg = -2;
-        record.prevReg = totalOrderedRecords - 1;
+        record.prevReg = prev.nextReg;
 
-        long toInsertLogPos = this->findWhereToInsert();
+        long newPos = this->insertHere();
+        current.nextReg = newPos;
 
-        lastRecord.nextReg = toInsertLogPos;
-
-        this->write(lastRecord, this->dataFileName, totalOrderedRecords - 1);
-        this->write(record, this->dataFileName, toInsertLogPos);
+        this->writeFile(current, this->dataFileName, prev.nextReg);
+        this->writeFile(record, this->dataFileName, newPos);
     }
 
-    void insertAfterNull(SFRecord<RecordType> current, SFRecord<RecordType> record) {
-        SFRecord<RecordType> currentRecordPrev = this->read(this->dataFileName, current.prevReg);
-
-        record.nextReg = -2;
-        record.prevReg = currentRecordPrev.nextReg;
-
-        long toInsertLogPos = this->findWhereToInsert();
-
-        current.nextReg = toInsertLogPos;
-
-        this->write(current, this->dataFileName, currentRecordPrev.nextReg);
-        this->write(record, this->dataFileName, toInsertLogPos);
-    }
-
-    void rebuildAfterInsert() {
-        unsigned long totalLines = getFileSize(this->dataFileName) / sizeof(SFRecord<RecordType>);
-
-        this->rebuild(totalLines);
-
-        totalOrderedRecords += AUX_FACTOR;
-        totalUnorderedRecords = 0;
+    void rebuildCall() {
+        this->rebuild();
+        mainFileRecords += AUX_FACTOR;
+        auxFileRecords = 0;
     }
 
     SFRecord<RecordType> searchInOrderedRecords(KeyType key) {
-        long low = 0, high = totalOrderedRecords - 1, mid;
+        long low = 0, high = mainFileRecords - 1, mid;
 
-        SFRecord<RecordType> currentRecord;
-
+        SFRecord<RecordType> current;
         while (low <= high) {
             mid = (low + high) / 2;
-            currentRecord = this->read(this->dataFileName, mid);
-            KeyType currentID = currentRecord.getKey();
+            current = this->readFile(this->dataFileName, mid);
+            KeyType currentID = current.getKey();
 
             if (currentID < key) {
                 low = mid + 1;
             } else if (currentID > key) {
                 high = mid - 1;
             } else {
-                return currentRecord;
+                return current;
             }
         }
-
-        return currentRecord;
+        return current;
     }
 
-    void updatePointersDelete(SFRecord<RecordType> toDelete, long toDeleteLogPos) {
-        if (toDelete.prevReg == -1) { // first register
-            SFRecord<RecordType> toDeleteNext = this->read(this->dataFileName, toDelete.nextReg);
-            toDeleteNext.prevReg = -1;
-            this->write(toDeleteNext, this->dataFileName, toDelete.nextReg);
-        } else if (toDelete.nextReg == -2) { // register whose next is null
-            SFRecord<RecordType> toDeletePrev;
-            toDeletePrev = this->read(this->dataFileName, toDelete.prevReg);
-            toDeletePrev.nextReg = -2;
-            this->write(toDeletePrev, this->dataFileName, toDelete.prevReg);
-        } else { // normal case
-            SFRecord<RecordType> toDeletePrev, toDeleteNext;
-            toDeletePrev = this->read(this->dataFileName, toDelete.prevReg);
-            toDeleteNext = this->read(this->dataFileName, toDelete.nextReg);
-            toDeletePrev.nextReg = toDelete.nextReg;
-            toDeleteNext.prevReg = toDelete.prevReg;
-            this->write(toDeletePrev, this->dataFileName, toDelete.prevReg);
-            this->write(toDeleteNext, this->dataFileName, toDelete.nextReg);
+    void pointerUpdateDeletition(SFRecord<RecordType> badRecord, long toDeleteLogPos) {
+        switch (badRecord.prevReg) {
+            case -1:{
+                SFRecord<RecordType> next = this->readFile(this->dataFileName, badRecord.nextReg);
+                next.prevReg = -1;
+                this->writeFile(next, this->dataFileName, badRecord.nextReg);
+                break;
+            }
+            case -2:{
+                SFRecord<RecordType> prev;
+                prev = this->readFile(this->dataFileName, badRecord.prevReg);
+                prev.nextReg = -2;
+                this->writeFile(prev, this->dataFileName, badRecord.prevReg);
+                break;
+            }
+            default: {
+                SFRecord<RecordType> prev, next;
+                prev = this->readFile(this->dataFileName, badRecord.prevReg);
+                next = this->readFile(this->dataFileName, badRecord.nextReg);
+                prev.nextReg = badRecord.nextReg;
+                next.prevReg = badRecord.prevReg;
+                this->writeFile(prev, this->dataFileName, badRecord.prevReg);
+                this->writeFile(next, this->dataFileName, badRecord.nextReg);
+                break;
+            }
         }
     }
 
-    void deleteOrderedRecord(long toDeleteLogPos) {
-        unsigned long totalLines = getFileSize(this->dataFileName) / sizeof(SFRecord<RecordType>);
-
-        this->rebuild(totalLines);
-
-        totalOrderedRecords = totalOrderedRecords + totalUnorderedRecords;
-        totalUnorderedRecords = 0;
+    void deleteInMainFile(long toDeleteLogPos) {
+        this->rebuild();
+        mainFileRecords = mainFileRecords + auxFileRecords;
+        auxFileRecords = 0;
     }
 
     long readHeader() {
@@ -287,30 +257,30 @@ private:
         header.close();
     }
 
-    void deleteUnorderedRecord(long toDeleteLogPos) {
+    void deleteInAuxFile(long toDeleteLogPos) {
         long headerTemp = readHeader();
         writeHeader(toDeleteLogPos);
-        SFRecord<RecordType> toDelete("-1", headerTemp); // mark as deleted with key -1
-        this->write(toDelete, this->dataFileName, toDeleteLogPos);
+        SFRecord<RecordType> toDelete("-1", headerTemp);
+        this->writeFile(toDelete, this->dataFileName, toDeleteLogPos);
     }
 
-    long getFirstRecordLogPos() {
+    long getFirstRecordPos() {
         long currentRecordLogPos = 0;
-        SFRecord<RecordType> currentRecord = this->read(this->dataFileName, currentRecordLogPos);
+        SFRecord<RecordType> currentRecord = this->readFile(this->dataFileName, currentRecordLogPos);
         while (currentRecord.prevReg == -1) {
-            currentRecord = this->read(this->dataFileName, ++currentRecordLogPos);
+            currentRecord = this->readFile(this->dataFileName, ++currentRecordLogPos);
         }
         return currentRecordLogPos - 1;
     }
 
-    void rebuild(unsigned long totalLines) {
+    void rebuild() {
         std::fstream sequentialFile(this->dataFileName);
         std::fstream auxFile(this->auxFileName, std::ios::out);
 
-        SFRecord<RecordType> record = this->read(this->dataFileName, this->getFirstRecordLogPos());
+        SFRecord<RecordType> record = this->readFile(this->dataFileName, this->getFirstRecordPos());
         while (record.nextReg != -2) {
             auxFile.write((char *) &record, sizeof(SFRecord<RecordType>));
-            record = this->read(this->dataFileName, record.nextReg);
+            record = this->readFile(this->dataFileName, record.nextReg);
         }
         auxFile.write((char *) &record, sizeof(SFRecord<RecordType>));
 
@@ -335,28 +305,27 @@ private:
         auxFile.close();
     }
 
-    long getLogicalPosition(SFRecord<RecordType> record) {
+    long getPos(SFRecord<RecordType> record) {
         if (record.prevReg == -1) {
             return 0;
         } else {
-            SFRecord<RecordType> prevRecord = this->read(this->dataFileName, record.prevReg);
+            SFRecord<RecordType> prevRecord = this->readFile(this->dataFileName, record.prevReg);
             return prevRecord.nextReg;
         }
     }
 
-    // finds where to insert in unordered records, considering free list
-    long findWhereToInsert() {
+    long insertHere() {
         long currentHeader = readHeader();
         if (currentHeader == -1) {
-            return totalOrderedRecords + totalUnorderedRecords;
+            return mainFileRecords + auxFileRecords;
         } else {
-            SFRecord<RecordType> deleted = read(this->dataFileName, currentHeader);
+            SFRecord<RecordType> deleted = readFile(this->dataFileName, currentHeader);
             writeHeader(deleted.nextReg);
             return currentHeader;
         }
     }
 
-    SFRecord<RecordType> read(const std::string &fileName, long position) {
+    SFRecord<RecordType> readFile(const std::string &fileName, long position) {
         std::fstream file(fileName);
         SFRecord<RecordType> record;
         file.seekg(position * sizeof(SFRecord<RecordType>));
@@ -365,45 +334,45 @@ private:
         return record;
     }
 
-    void write(SFRecord<RecordType> record, const std::string &fileName, long position) {
+    void writeFile(SFRecord<RecordType> record, const std::string &fileName, long position) {
         std::fstream file(fileName);
         file.seekp(position * sizeof(SFRecord<RecordType>));
         file.write((char *) &record, sizeof(SFRecord<RecordType>));
         file.close();
     }
 
-    void insertBetweenUnorderedRecords(SFRecord<RecordType> baseRecord, SFRecord<RecordType> toInsert) {
+    void insertMiddleAuxFile(SFRecord<RecordType> baseRecord, SFRecord<RecordType> toInsert) {
         SFRecord<RecordType> current;
 
         long baseRecordLogPos;
-        SFRecord<RecordType> baseRecordNext = this->read(this->dataFileName, baseRecord.nextReg);
+        SFRecord<RecordType> baseRecordNext = this->readFile(this->dataFileName, baseRecord.nextReg);
         baseRecordLogPos = baseRecordNext.prevReg;
 
-        current = this->read(this->dataFileName, baseRecordLogPos);
-        while (current.nextReg > totalOrderedRecords - 1 && current.nextReg != -2 &&
-               current.getKey() < toInsert.getKey()) { // find where to insert
+        current = this->readFile(this->dataFileName, baseRecordLogPos);
+        while (current.nextReg > mainFileRecords - 1 && current.nextReg != -2 &&
+               current.getKey() < toInsert.getKey()) {
             if (current.getKey() == toInsert.getKey()) {
-                throw std::out_of_range("User attempted to insert an already existing key");
+                throw std::out_of_range("User attempted to insertRecord an already existing key");
             }
-            current = this->read(this->dataFileName, current.nextReg);
+            current = this->readFile(this->dataFileName, current.nextReg);
         }
-        if (current.getKey() == toInsert.getKey()) { // check last register key
-            throw std::out_of_range("User attempted to insert an already existing key");
+        if (current.getKey() == toInsert.getKey()) {
+            throw std::out_of_range("User attempted to insertRecord an already existing key");
         }
-        if (current.nextReg < totalOrderedRecords) { // if current points to ordered records
+        if (current.nextReg < mainFileRecords) {
             if (current.getKey() > toInsert.getKey()) {
-                this->insertUpdatingPointers(toInsert, current);
+                this->pointersUpdate(toInsert, current);
             } else {
                 if (current.nextReg == -2) {
-                    this->insertAfterNull(current, toInsert); // special case
+                    this->nullBeginningInsertion(current, toInsert);
                 } else {
                     long currentNextLogPos = current.nextReg;
-                    SFRecord<RecordType> currentNext = this->read(this->dataFileName, currentNextLogPos);
-                    this->insertUpdatingPointers(toInsert, currentNext); // insert record to the left of currentNext
+                    SFRecord<RecordType> currentNext = this->readFile(this->dataFileName, currentNextLogPos);
+                    this->pointersUpdate(toInsert, currentNext);
                 }
             }
-        } else { // if current points to an unordered record
-            this->insertUpdatingPointers(toInsert, current); // insert record to the left of current
+        } else {
+            this->pointersUpdate(toInsert, current);
         }
     }
 
@@ -416,7 +385,7 @@ public:
         this->auxFileName = name + "Aux.bin";
 
         this->createBinFromCSV(baseFileName);
-        this->initializeFreeList();
+        this->createFreeList();
     }
 
     SequentialFile() = default;
@@ -429,115 +398,96 @@ public:
         while (sequentialFile.read((char *) &record, sizeof(record))) {
             records.push_back(record);
         }
-
         return records;
     }
 
-    SFRecord<RecordType> search(KeyType key) {
+    SFRecord<RecordType> punctualSearch(KeyType key) {
         SFRecord<RecordType> baseRecord = this->searchInOrderedRecords(key);
 
-        if (baseRecord.getKey() == key) {
+        if (baseRecord.getKey() == key)
             return baseRecord;
-        }
-
         if ((baseRecord.prevReg == -1 && key < baseRecord.getKey()) ||
             (baseRecord.nextReg == -2 && key > baseRecord.getKey())) {
             throw std::out_of_range("Search out of range. Key: " + key);
         }
 
-        if (baseRecord.getKey() > key) {
+        if (baseRecord.getKey() > key)
             baseRecord = this->getPrevRecord(baseRecord);
-        }
 
         SFRecord<RecordType> current = baseRecord;
-
-        current = this->read(this->dataFileName, current.nextReg);
+        current = this->readFile(this->dataFileName, current.nextReg);
         while (current.getKey() <= key) {
-            if (current.getKey() == key) {
+            if (current.getKey() == key)
                 return current;
-            } else {
-                current = this->read(this->dataFileName, current.nextReg);
-            }
+            current = this->readFile(this->dataFileName, current.nextReg);
         }
-
         throw std::out_of_range("Search out of range. key: " + key);
     }
 
-    std::vector<SFRecord<RecordType>> searchByRanges(KeyType begin, KeyType end) {
-        if (begin > end) {
+    std::vector<SFRecord<RecordType>> rangeSearch(KeyType begin, KeyType end) {
+        if (begin > end)
             std::swap(begin, end);
-        }
 
         SFRecord<RecordType> current = this->searchInOrderedRecords(begin);
-
         if (current.prevReg != -1) {
-            if (current.getKey() > begin) {
+            if (current.getKey() > begin)
                 current = this->getPrevRecord(current);
-            }
         }
 
         std::vector<SFRecord<RecordType>> searchResult;
 
         while (true) {
-            if (current.getKey() >= begin && current.getKey() <= end) {
+            if (current.getKey() >= begin && current.getKey() <= end)
                 searchResult.push_back(current);
-            }
-            if (current.getKey() > end || current.nextReg == -2) {
+            if (current.getKey() > end || current.nextReg == -2)
                 return searchResult;
-            }
-            current = this->read(this->dataFileName, current.nextReg);
+            current = this->readFile(this->dataFileName, current.nextReg);
         }
     }
 
     void deleteRecord(KeyType key) {
-        SFRecord<RecordType> toDelete = this->search(key);
+        SFRecord<RecordType> badRecord = this->punctualSearch(key);
 
-        if (toDelete.getKey() != key) {
+        if (badRecord.getKey() != key) {
             throw std::out_of_range("Record with key " + key + " not found.");
         }
 
-        long toDeleteLogPos = this->getLogicalPosition(toDelete);
+        long deletePos = this->getPos(badRecord);
+        this->pointerUpdateDeletition(badRecord, deletePos);
 
-        this->updatePointersDelete(toDelete, toDeleteLogPos);
-
-        if (toDeleteLogPos < totalOrderedRecords) {
-            this->deleteOrderedRecord(toDeleteLogPos);
-            --totalOrderedRecords;
+        if (deletePos < mainFileRecords) {
+            this->deleteInMainFile(deletePos);
+            --mainFileRecords;
         } else {
-            this->deleteUnorderedRecord(toDeleteLogPos);
-            --totalUnorderedRecords;
+            this->deleteInAuxFile(deletePos);
+            --auxFileRecords;
         }
     }
 
-    void insert(SFRecord<RecordType> toInsert) {
+    void insertRecord(SFRecord<RecordType> toInsert) {
         SFRecord<RecordType> baseRecord = this->searchInOrderedRecords(toInsert.getKey());
 
-        if (baseRecord.getKey() == toInsert.getKey()) {
-            throw std::out_of_range("User attempted to insert an already existing key");
-        }
+        if (baseRecord.getKey() == toInsert.getKey())
+            throw std::out_of_range("User attempted to insertRecord an already existing key");
 
-        if (baseRecord.prevReg == -1 && toInsert.getKey() < baseRecord.getKey()) { // insert at the beginning
-            this->insertAtFirstPosition(toInsert);
-        } else if (baseRecord.nextReg == -2) { // insert at last position
-            this->insertAtLastPosition(toInsert);
-        } else {
-            if (baseRecord.getKey() > toInsert.getKey()) {
+        if (baseRecord.prevReg == -1 && toInsert.getKey() < baseRecord.getKey())
+            this->insertAtTheBeginning(toInsert);
+        else if (baseRecord.nextReg == -2)
+            this->insertAtTheEnd(toInsert);
+        else {
+            if (baseRecord.getKey() > toInsert.getKey())
                 baseRecord = this->getPrevRecord(baseRecord);
-            }
-            if (baseRecord.nextReg < totalOrderedRecords) {
-                this->simpleInsert(baseRecord,
-                                   toInsert); // when it's not necessary to insert "between" unordered registers
-            } else { // when baseRecord points to unordered records
-                this->insertBetweenUnorderedRecords(baseRecord, toInsert);
-            }
+            if (baseRecord.nextReg < mainFileRecords)
+                this->basicInsert(baseRecord, toInsert);
+            else
+                this->insertMiddleAuxFile(baseRecord, toInsert);
         }
-        if (++totalUnorderedRecords == AUX_FACTOR) {
-            this->rebuildAfterInsert();
-        }
+        if (++auxFileRecords == AUX_FACTOR)
+            this->rebuildCall();
     }
 
     long getTotalOrderedRecords() {
-        return this->totalOrderedRecords;
+        return this->mainFileRecords;
     }
 
 };

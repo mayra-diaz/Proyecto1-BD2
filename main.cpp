@@ -9,12 +9,12 @@ int main() {
     std::vector<str> splitLine = {"Hola FC", "11", "0", "2", "2", "2", "-4", "1", "5", "-4"};
     SFRecord<Team> testTeam(splitLine);
 
-    sq.insert(testTeam);
+    sq.insertRecord(testTeam);
 
 
     std::cout << "________________________________________\n";
 
-    //auto searchResult = sq.searchByRanges("Arsenal", "Wolves");
+    //auto searchResult = sq.rangeSearch("Arsenal", "Wolves");
     sq.deleteRecord("Hola FC");
 
     auto efe = sq.load();
